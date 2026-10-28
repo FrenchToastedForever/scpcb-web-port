@@ -60,7 +60,8 @@ void WebGPUCanvas::resize( int w,int h,float d ){
 
 WGPUTextureFormat WebGPUCanvas::format()const{
 	if( is_surface ) return res->surface_format;
-	return wide_format?WGPUTextureFormat_RGB10A2Unorm:WGPUTextureFormat_RGBA8Unorm;
+	// Never select RGB10A2: 10-bit render passes crash ChromeOS Vulkan drivers.
+	return WGPUTextureFormat_RGBA8Unorm;
 }
 
 void WebGPUCanvas::ensureTexture(){

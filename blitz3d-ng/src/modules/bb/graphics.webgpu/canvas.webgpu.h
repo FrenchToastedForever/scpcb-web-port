@@ -74,7 +74,8 @@ public:
 	void resize( int w,int h,float d );
 
 	bool isSurface()const{ return is_surface; }
-	void useWideFormat(){ wide_format=true; }
+	// Kept as a no-op: RGB10A2 is disabled for ChromeOS Vulkan stability.
+	void useWideFormat(){ wide_format=false; }
 	bool needsUpload()const{ return dirty||mips_dirty; }
 	bool gpuWritten()const{ return gpu_written; }
 	WGPUTextureFormat format()const;

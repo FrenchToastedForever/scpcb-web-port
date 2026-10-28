@@ -74,7 +74,7 @@ def need(tool, hint):
 
 
 def jobs():
-    return str(os.cpu_count() or 4)
+    return os.environ.get("JOBS", "4")
 
 
 def configure(build_dir, cmd, **kw):
@@ -450,7 +450,7 @@ def link_game(emcc, flags):
 def build_flags():
     if os.environ.get("SCPCB_DEBUG", "0") == "1":
         return "-O2 -sASSERTIONS=1 --profiling-funcs"
-    return "-O3 -sASSERTIONS=0 -sGL_TRACK_ERRORS=0 -sINITIAL_MEMORY=536870912"
+    return "-O3 -sASSERTIONS=0 -sGL_TRACK_ERRORS=0 -sINITIAL_MEMORY=536870912 -sMAXIMUM_MEMORY=1073741824 -g0"
 
 
 def publish(src, dst_dir, stem, ext):
@@ -569,8 +569,9 @@ def main():
     if "game" in steps:
         print(f"\ndone. output is in {os.path.join(ROOT, 'webgame')}")
     if args.serve:
-        os.chdir(os.path.join(ROOT, "webgame"))
-        run([sys.executable, "-m", "http.server", "8090", "--bind", "127.0.0.1"])
+        # serve.py adds the Community Save Sharing API and the WebGPU headers
+        # on top of static file serving for webgame/.
+        run([sys.executable, os.path.join(ROOT, "serve.py")])
 
 
 if __name__ == "__main__":

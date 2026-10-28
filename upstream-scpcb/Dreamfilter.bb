@@ -16,10 +16,9 @@ Function CreateBlurImage()
 	ark_sh = GraphicHeight;GraphicsHeight()
 	CameraViewport cam,0,0,ark_sw,ark_sh
 
-	ark_tex = 2048
-	While ark_tex < ark_sw Or ark_tex < ark_sh
-		ark_tex = ark_tex * 2
-	Wend
+	; Hard-cap the blur render target at 512x512. Growing this with the screen
+	; resolution (up to 2048/4096) exhausted VRAM and crashed ChromeOS drivers.
+	ark_tex = 512
 
 	;Create sprite
 	Local spr% = CreateMesh(cam)
@@ -31,7 +30,8 @@ Function CreateBlurImage()
 	AddTriangle sf, 0, 1, 2
 	AddTriangle sf, 3, 2, 1
 	EntityFX spr, 17
-	ScaleEntity spr, Float(ark_tex) / Float(ark_sw), Float(ark_tex) / Float(ark_sw), 1
+	; Cover the full viewport regardless of the smaller blur target.
+	ScaleEntity spr, 1.0, Float(GraphicHeight) / Float(GraphicWidth), 1
 	PositionEntity spr, 0, 0, 1.0001
 	EntityOrder spr, -100000
 	EntityBlend spr, 1
@@ -46,8 +46,11 @@ Function UpdateBlur(power#)
 	
 	EntityAlpha ark_blur_image, power#
 	
-	;CopyRect ark_sw / 2 - 1024, ark_sh / 2 - 1024, 2048, 2048, 0, 0, BackBuffer(), TextureBuffer(ark_blur_texture)
-	CopyRect 0, 0, GraphicWidth, GraphicHeight, ark_tex / 2.0 - GraphicWidth/2, ark_tex / 2.0 - GraphicHeight/2, BackBuffer(), TextureBuffer(ark_blur_texture)
+	; Copy a centred, clamped region so the 512x512 target never goes negative
+	; or out of bounds at higher screen resolutions.
+	Local cw% = Min(GraphicWidth, ark_tex)
+	Local ch% = Min(GraphicHeight, ark_tex)
+	CopyRect (GraphicWidth - cw) / 2, (GraphicHeight - ch) / 2, cw, ch, (ark_tex - cw) / 2, (ark_tex - ch) / 2, BackBuffer(), TextureBuffer(ark_blur_texture)
 	
 End Function
 

@@ -8,7 +8,7 @@
 <style>
   html,body { margin:0; padding:0; width:100%; height:100%; background:#000; overflow:hidden; }
   #wrap { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000; }
-  #canvas { display:block; background:#000; outline:none; }
+  #canvas { display:block; background:#000; outline:none; width:100vw; height:100vh; object-fit:fill; }
   #loading { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
              justify-content:center; background:#000; z-index:5; }
   #pct { color:#fff; font:500 15px/1 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -21,23 +21,234 @@
                    letter-spacing:0.06em; border:1px solid rgba(255,255,255,0.15); border-radius:14px;
                    transition:border-color .15s ease-out, background-color .15s ease-out; }
   #picker button:hover, #picker button:focus-visible { border-color:#fff; background-color:rgba(255,255,255,0.06); }
+  #clean-boot-wrap, #bypass-cache-wrap { display:flex; align-items:center; gap:8px; color:#cfcfcf;
+                     font:500 13px/1.4 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                     cursor:pointer; user-select:none; }
+  #clean-boot-wrap { margin-top:18px; }
+  #bypass-cache-wrap { margin-top:8px; }
+  #clean-boot-wrap input, #bypass-cache-wrap input { width:16px; height:16px; accent-color:#c0392b; flex:none; margin:0; }
+  #diag { position:fixed; top:10px; left:10px; z-index:80; max-width:min(560px,72vw);
+          padding:8px 10px; background:rgba(0,0,0,0.74); border:1px solid rgba(255,255,255,0.18);
+          border-left:3px solid var(--cs-amber, #d9a441); color:#d8d8d8; pointer-events:none;
+          font:500 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+          white-space:pre-wrap; overflow-wrap:anywhere; text-shadow:0 1px 2px #000; }
+  #diag-title { color:var(--cs-amber, #d9a441); font-weight:700; letter-spacing:0.12em; margin-bottom:4px; }
+  #diag-stage { color:#fff; font-weight:700; margin-bottom:4px; }
+  #diag.diag-warn { border-left-color:#d9a441; }
+  #diag.diag-warn #diag-body { color:#d9a441; }
+  #diag.diag-error { border-left-color:#ff4d4d; }
+  #diag.diag-error #diag-title { color:#ff4d4d; }
+  #diag.diag-error #diag-body { color:#ff4d4d; font-size:20px; font-weight:700; line-height:1.35; }
+
+  /* ---- Community Saves ---- */
+  :root {
+    --cs-bg:#111; --cs-card:#161616; --cs-border:#333; --cs-border-2:#2e2e2e;
+    --cs-text:#d8d8d8; --cs-dim:#8a8a8a; --cs-red:#c0392b; --cs-amber:#d9a441;
+    --cs-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  }
+  .cs-toggle, .cs-overlay, .cs-overlay *, .cs-toast { box-sizing:border-box; }
+  .cs-topbar { position:fixed; top:14px; right:14px; z-index:60; display:flex;
+    align-items:center; gap:8px; }
+  .cs-toggle { cursor:pointer;
+    background:var(--cs-card); color:var(--cs-text); border:1px solid var(--cs-border);
+    border-left:3px solid var(--cs-red); padding:9px 13px; margin:0;
+    font:600 11px/1.2 var(--cs-mono); letter-spacing:0.12em; text-transform:uppercase; }
+  .cs-toggle:hover, .cs-toggle:focus-visible { background:#1e1e1e; border-color:#4a4a4a;
+    border-left-color:var(--cs-amber); color:#fff; outline:none; }
+  .cs-fullscreen { border-left-color:var(--cs-amber); }
+  .cs-fullscreen:hover, .cs-fullscreen:focus-visible { border-left-color:var(--cs-red); }
+  .cs-reset { border-left-color:var(--cs-red); }
+  .cs-reset:hover, .cs-reset:focus-visible { border-left-color:var(--cs-amber); }
+  body.cs-fullscreen #cs-topbar,
+  body.cs-fullscreen #cs-overlay,
+  body.cs-fullscreen #cs-toast,
+  body.cs-fullscreen #diag { display:none !important; }
+  .cs-overlay { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.82);
+    display:none; align-items:center; justify-content:center; padding:16px; }
+  .cs-overlay.open { display:flex; }
+  .cs-modal { width:min(900px,92vw); max-height:86vh; background:var(--cs-bg);
+    border:1px solid var(--cs-border); box-shadow:0 24px 60px rgba(0,0,0,.75);
+    display:flex; flex-direction:column; min-height:0; color:var(--cs-text);
+    font-family:var(--cs-mono); }
+  .cs-head { display:flex; align-items:flex-start; gap:14px; padding:18px 20px 14px;
+    border-bottom:1px solid var(--cs-border-2); }
+  .cs-head-text { flex:1; min-width:0; }
+  .cs-kicker { color:var(--cs-red); font-size:10px; letter-spacing:0.2em;
+    text-transform:uppercase; margin-bottom:5px; }
+  .cs-title { margin:0; color:#fff; font-size:20px; font-weight:600; letter-spacing:0.14em;
+    text-transform:uppercase; line-height:1.15; }
+  .cs-close { all:unset; box-sizing:border-box; cursor:pointer; color:var(--cs-dim);
+    border:1px solid var(--cs-border); background:#1a1a1a; width:30px; height:30px;
+    display:flex; align-items:center; justify-content:center; font:400 18px/1 var(--cs-mono);
+    flex:none; }
+  .cs-close:hover, .cs-close:focus-visible { color:#fff; border-color:var(--cs-amber); outline:none; }
+  .cs-tabs { display:flex; align-items:center; gap:2px; padding:0 20px;
+    border-bottom:1px solid var(--cs-border-2); flex:none; }
+  .cs-tab { all:unset; box-sizing:border-box; cursor:pointer; padding:12px 14px;
+    color:var(--cs-dim); font:500 11px/1.2 var(--cs-mono); letter-spacing:0.1em;
+    text-transform:uppercase; border-bottom:2px solid transparent; }
+  .cs-tab:hover, .cs-tab:focus-visible { color:var(--cs-text); outline:none; }
+  .cs-tab.active { color:#fff; border-bottom-color:var(--cs-amber); }
+  .cs-refresh { margin-left:auto; }
+  .cs-btn { all:unset; box-sizing:border-box; cursor:pointer; padding:9px 14px;
+    border:1px solid var(--cs-border); background:#1a1a1a; color:var(--cs-text);
+    font:500 11px/1.2 var(--cs-mono); letter-spacing:0.09em; text-transform:uppercase;
+    white-space:nowrap; }
+  .cs-btn:hover:not(:disabled), .cs-btn:focus-visible:not(:disabled) {
+    border-color:var(--cs-amber); color:#fff; background:#222; outline:none; }
+  .cs-btn:disabled { opacity:.4; cursor:not-allowed; }
+  .cs-btn.primary { border-color:var(--cs-amber); color:var(--cs-amber); }
+  .cs-btn.primary:hover:not(:disabled), .cs-btn.primary:focus-visible:not(:disabled) {
+    background:var(--cs-amber); color:#111; border-color:var(--cs-amber); }
+  .cs-panel { display:none; padding:18px 20px; overflow:auto; min-height:0; }
+  .cs-panel.active { display:block; }
+  .cs-status { color:var(--cs-dim); font-size:12px; line-height:1.55; margin-bottom:12px;
+    word-break:break-word; white-space:pre-wrap; }
+  .cs-status.error { color:#e0786d; }
+  .cs-seed { color:var(--cs-dim); font-size:11px; line-height:1.5; word-break:break-word; }
+  .cs-seed.warn { color:var(--cs-amber); }
+  .cs-list { display:flex; flex-direction:column; gap:10px; }
+  .cs-card { display:flex; gap:14px; align-items:flex-start; padding:14px 16px;
+    background:var(--cs-card); border:1px solid var(--cs-border-2);
+    border-left:3px solid var(--cs-red); }
+  .cs-card:hover { border-color:#3c3c3c; border-left-color:var(--cs-red); }
+  .cs-card-body { flex:1; min-width:0; }
+  .cs-card-title { color:#fff; font-size:14px; font-weight:600; line-height:1.35;
+    word-break:break-word; }
+  .cs-card-meta { color:var(--cs-dim); font-size:11px; line-height:1.5; margin-top:5px;
+    word-break:break-word; }
+  .cs-card-desc { color:var(--cs-text); font-size:12px; line-height:1.55; margin-top:8px;
+    white-space:pre-wrap; word-break:break-word; }
+  .cs-field { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+  .cs-label { color:var(--cs-dim); font-size:10px; letter-spacing:0.16em;
+    text-transform:uppercase; }
+  .cs-input { width:100%; background:#0b0b0b; border:1px solid var(--cs-border);
+    color:var(--cs-text); padding:10px 11px; font:400 12px/1.4 var(--cs-mono);
+    border-radius:0; }
+  .cs-input:focus { outline:none; border-color:var(--cs-amber);
+    box-shadow:0 0 0 1px rgba(217,164,65,.25); }
+  .cs-input:disabled { opacity:.5; }
+  select.cs-input { appearance:none; -webkit-appearance:none; cursor:pointer; }
+  textarea.cs-input { resize:vertical; min-height:76px; }
+  .cs-upload-actions { display:flex; justify-content:flex-end; margin-top:2px; }
+  .cs-toast { position:fixed; left:50%; bottom:22px; z-index:70; transform:translateX(-50%) translateY(10px);
+    max-width:min(560px,90vw); padding:12px 18px; background:var(--cs-card);
+    border:1px solid var(--cs-border); border-left:3px solid var(--cs-amber);
+    color:var(--cs-text); font:500 12px/1.5 var(--cs-mono);
+    opacity:0; visibility:hidden; transition:opacity .18s ease, transform .18s ease, visibility .18s;
+    word-break:break-word; }
+  .cs-toast.show { opacity:1; visibility:visible; transform:translateX(-50%) translateY(0); }
+  .cs-toast.error { border-left-color:var(--cs-red); }
 </style>
 </head>
 <body>
 <div id="wrap"><canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas></div>
-<div id="loading"><div id="picker"></div><div id="pct">0%</div><div id="bar"><div id="barfill"></div></div></div>
+<div id="loading"><div id="picker"></div><div id="pct">0%</div><div id="bar"><div id="barfill"></div></div>
+  <label id="clean-boot-wrap" for="clean-boot"><input type="checkbox" id="clean-boot" checked> Clean boot (wipe saved data)</label>
+  <label id="bypass-cache-wrap" for="bypass-cache"><input type="checkbox" id="bypass-cache" checked> Clear Cache (download fresh)</label>
+</div>
+
+<div id="diag" role="status" aria-live="polite">
+  <div id="diag-title">GPU DIAGNOSTICS</div>
+  <div id="diag-stage">Waiting for launch options...</div>
+  <div id="diag-body">Waiting for adapter...</div>
+</div>
+
+<div id="cs-topbar" class="cs-topbar">
+  <button type="button" id="cs-fullscreen" class="cs-toggle cs-fullscreen" aria-label="Enter fullscreen" title="Enter fullscreen">[ FULLSCREEN ]</button>
+  <button type="button" id="cs-toggle" class="cs-toggle" aria-haspopup="dialog" aria-controls="cs-overlay">[ COMMUNITY SAVES ]</button>
+  <button type="button" id="cs-reset" class="cs-toggle cs-reset" title="Delete saves, options and cached assets">[ RESET DATA ]</button>
+</div>
+
+<div id="cs-overlay" class="cs-overlay" aria-hidden="true">
+  <div id="cs-modal" class="cs-modal" role="dialog" aria-modal="true" aria-labelledby="cs-modal-title">
+    <div class="cs-head">
+      <div class="cs-head-text">
+        <div class="cs-kicker">SCP FOUNDATION // ARCHIVE</div>
+        <h2 id="cs-modal-title" class="cs-title">COMMUNITY SAVES</h2>
+      </div>
+      <button type="button" id="cs-close" class="cs-close" aria-label="Close community saves">&#215;</button>
+    </div>
+    <div class="cs-tabs" role="tablist" aria-label="Community save sections">
+      <button type="button" class="cs-tab active" data-tab="browse" role="tab" aria-selected="true">Browse Saves</button>
+      <button type="button" class="cs-tab" data-tab="upload" role="tab" aria-selected="false">Upload My Save</button>
+      <button type="button" id="cs-refresh" class="cs-btn cs-refresh" title="Refresh">Refresh</button>
+    </div>
+    <div class="cs-panel active" data-panel="browse" role="tabpanel">
+      <div id="cs-browse-status" class="cs-status">Loading...</div>
+      <div id="cs-list" class="cs-list"></div>
+    </div>
+    <div class="cs-panel" data-panel="upload" role="tabpanel">
+      <div class="cs-field">
+        <label class="cs-label" for="cs-local-select">Local save</label>
+        <select id="cs-local-select" class="cs-input"></select>
+        <div id="cs-local-seed" class="cs-seed" aria-live="polite">Select a save to detect its map seed.</div>
+      </div>
+      <div class="cs-field">
+        <label class="cs-label" for="cs-title-input">Save Title</label>
+        <input id="cs-title-input" class="cs-input" type="text" maxlength="50" autocomplete="off">
+      </div>
+      <div class="cs-field">
+        <label class="cs-label" for="cs-author-input">Author</label>
+        <input id="cs-author-input" class="cs-input" type="text" maxlength="50" placeholder="Anonymous" autocomplete="off">
+      </div>
+      <div class="cs-field">
+        <label class="cs-label" for="cs-desc-input">Description</label>
+        <textarea id="cs-desc-input" class="cs-input" maxlength="200" rows="3"></textarea>
+      </div>
+      <div id="cs-upload-status" class="cs-status"></div>
+      <div class="cs-upload-actions">
+        <button type="button" id="cs-share" class="cs-btn primary">Share Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="cs-toast" class="cs-toast" role="status" aria-live="polite"></div>
+
 <script>
   const canvas = document.getElementById('canvas');
   const loading = document.getElementById('loading');
   const barfill = document.getElementById('barfill');
   const pctEl = document.getElementById('pct');
+  const cleanBootEl = document.getElementById('clean-boot');
+  const bypassCacheEl = document.getElementById('bypass-cache');
+  const diagEl = document.getElementById('diag');
+  const diagStage = document.getElementById('diag-stage');
+  const diagBody = document.getElementById('diag-body');
+
+  function stage(text) {
+    if (diagStage) diagStage.textContent = text;
+    console.log('[stage] ' + text);
+  }
+
+  function showDiag(text) {
+    if (!diagEl || !diagBody) return;
+    diagEl.classList.remove('diag-error', 'diag-warn');
+    diagBody.textContent = text;
+  }
+
+  function showDiagError(text) {
+    if (!diagEl || !diagBody) return;
+    diagEl.classList.remove('diag-warn');
+    diagEl.classList.add('diag-error');
+    diagBody.textContent = text;
+  }
+
+  function diagAppend(text, kind) {
+    if (!diagEl || !diagBody) return;
+    diagBody.textContent += '\n' + text;
+    if (kind === 'error') diagEl.classList.add('diag-error');
+    else diagEl.classList.add('diag-warn');
+    console.error('[shell] ' + text);
+  }
 
   function fit(){
-    const gw = canvas.width || 1280, gh = canvas.height || 720;
-    const vw = window.innerWidth, vh = window.innerHeight;
-    const s = Math.min(vw / gw, vh / gh);
-    canvas.style.width  = Math.round(gw * s) + 'px';
-    canvas.style.height = Math.round(gh * s) + 'px';
+    // Fill the viewport exactly; no letterbox/pillarbox bars caused by
+    // aspect-ratio matching. The game buffer is sized by the resolution
+    // selection below and stretched by object-fit:fill.
+    canvas.style.width  = '100vw';
+    canvas.style.height = '100vh';
   }
   new MutationObserver(fit).observe(canvas, { attributes: true, attributeFilter: ['width', 'height'] });
   fit();
@@ -347,6 +558,7 @@
   function fail(t){
     if (failed) return;
     failed = true;
+    if (!diagEl || !diagEl.classList.contains('diag-error')) showDiagError(t);
     document.getElementById('bar').style.display = 'none';
     document.getElementById('picker').style.display = 'none';
     pctEl.style.display = 'none';
@@ -357,7 +569,7 @@
     loading.appendChild(m);
   }
 
-  const FATAL_LINE = /^\[(RuntimeError|bbEx uncaught|std::exception|unknown exception)\]|device lost \((1|4)\)/;
+  const FATAL_LINE = /^\[(RuntimeError|bbEx uncaught|std::exception|unknown exception)\]|device lost \((unknown|failed-creation|1|4)\)/;
   let stopLines = null;
 
   function ended() {
@@ -417,24 +629,49 @@
   addEventListener('error', (ev) => { if (isWasmFailure(ev.error)) fail('The game stopped.\n' + ev.error.message); });
   addEventListener('unhandledrejection', (ev) => { if (isWasmFailure(ev.reason)) fail('The game stopped.\n' + ev.reason.message); });
 
+  const LOW_MEMORY_DEVICE = (() => {
+    try {
+      const memory = Number(navigator.deviceMemory);
+      return (isFinite(memory) && memory <= 4) ||
+             /CrOS|Chromebook/i.test(navigator.userAgent || '');
+    } catch (e) { return false; }
+  })();
+
+  function autoResolution() {
+    const screenAspect = window.innerWidth / window.innerHeight;
+    let targetWidth = Math.max(2, Math.round((480 * screenAspect) / 2) * 2);
+    let targetHeight = 480;
+    return { w: targetWidth, h: targetHeight, label: 'Auto (Full Screen Aspect Ratio)', auto: true };
+  }
+
   const RESOLUTIONS = [
+    { auto: true, w: 0,   h: 480,  label: 'Auto (Full Screen Aspect Ratio)' },
+    { w: 640,  h: 480,  label: '640x480 - Default for low-end Chromebooks' },
+    { w: 854,  h: 480,  label: '854x480 - Low-end fallback' },
     { w: 1280, h: 720,  label: '720p - Chromebooks and budget laptops' },
     { w: 1920, h: 1080, label: '1080p - Everyday laptops and PCs' },
     { w: 2560, h: 1440, label: '1440p - Gaming laptops and desktops' },
     { w: 3840, h: 2160, label: '2160p (4K) - High-end gaming PCs' },
   ];
   const RESOLUTION_KEY = 'scpcb.resolution';
+  const DEFAULT_RESOLUTION = 0; // Auto (480p vertical, display aspect ratio)
+  // Never trust a previous selection: the old key may point at 1080p/4K.
+  try { localStorage.removeItem(RESOLUTION_KEY); } catch (e) {}
+  // ARM Mali Bifrost / Chromebooks keep 480p vertical resolution and may
+  // choose Auto or the fixed 640x480 fallback.
+  let AVAILABLE_RESOLUTIONS = LOW_MEMORY_DEVICE
+    ? RESOLUTIONS.filter((r) => r.auto || (r.w === 640 && r.h === 480))
+    : RESOLUTIONS;
+  if (LOW_MEMORY_DEVICE) {
+    console.warn('[shell] low-memory/Chromebook detected: 480p resolution options only');
+  }
 
   function chooseResolution() {
     return new Promise((resolve) => {
-      let last = 1;
-      try {
-        const saved = parseInt(localStorage.getItem(RESOLUTION_KEY), 10);
-        if (saved >= 0 && saved < RESOLUTIONS.length) last = saved;
-      } catch (e) {}
+      let last = Math.min(DEFAULT_RESOLUTION, AVAILABLE_RESOLUTIONS.length - 1);
 
       const box = document.getElementById('picker');
-      const buttons = RESOLUTIONS.map((r, i) => {
+      const buttons = AVAILABLE_RESOLUTIONS.map((r, i) => {
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = r.label;
@@ -443,7 +680,7 @@
           box.style.display = 'none';
           document.getElementById('bar').style.display = '';
           pctEl.style.display = '';
-          resolve(r);
+          resolve(r.auto ? autoResolution() : r);
         });
         box.appendChild(b);
         return b;
@@ -495,10 +732,56 @@
     text = setIni(text, 'graphics', 'height', r.h);
     text = setIni(text, 'graphics', 'fullscreen', 'false');
     text = setIni(text, 'graphics', 'borderless windowed', 'false');
+    // Force the cheap defaults on every launch, even if a previous run saved
+    // heavy desktop settings into IndexedDB/options.ini.
+    text = setIni(text, 'graphics', 'bump mapping enabled', '0');
+    text = setIni(text, 'graphics', 'room lights enabled', '0');
+    text = setIni(text, 'graphics', 'antialias', '0');
+    text = setIni(text, 'graphics', 'texture details', '0');
+    text = setIni(text, 'graphics', 'particle amount', '0');
+    text = setIni(text, 'graphics', 'anisotropy', '0');
+    text = setIni(text, 'graphics', 'enable vram', '0');
     return text;
   }
 
+  async function purgeStoredData() {
+    // Clean boot: remove every persisted option/save so a corrupted config
+    // cannot survive a reload. Asset chunks are left cached (142 MB).
+    try { localStorage.clear(); } catch (e) {}
+    try { sessionStorage.clear(); } catch (e) {}
+    const names = new Set(['/idbfs', 'scpcb']);
+    try {
+      if (indexedDB.databases) {
+        for (const db of await indexedDB.databases()) {
+          // Keep unrelated same-origin apps intact; wipe the game's IDBFS/DB.
+          if (db.name && (/^\/idbfs/.test(db.name) || /^scpcb/.test(db.name))) names.add(db.name);
+        }
+      }
+    } catch (e) {}
+    await Promise.all(Array.from(names).map((name) => new Promise((resolve) => {
+      let done = false;
+      const finish = () => { if (!done) { done = true; resolve(); } };
+      try {
+        const req = indexedDB.deleteDatabase(name);
+        req.onsuccess = req.onerror = req.onblocked = finish;
+        setTimeout(finish, 2000);
+      } catch (e) { finish(); }
+    })));
+    console.log('[shell] clean boot: localStorage and IndexedDB cleared');
+  }
+
   const ASSET_CACHE = 'scpcb-assets';
+  let forceCacheBypass = false;
+
+  async function clearAssetCache() {
+    forceCacheBypass = true;
+    try {
+      if (typeof caches !== 'undefined') await caches.delete(ASSET_CACHE);
+      console.log('[shell] asset cache deleted');
+    } catch (e) {
+      diagAppend('Could not delete asset cache: ' + (e && e.message ? e.message : e), 'warn');
+    }
+  }
 
   async function openAssetCache() {
     try {
@@ -508,28 +791,58 @@
     }
   }
 
-  async function fetchPart(cache, part, writes) {
+  async function fetchPart(cache, part) {
     const url = part.name;
+    if (forceCacheBypass) cache = null;
+
     if (cache) {
-      const hit = await cache.match(url);
+      let hit = null;
+      try {
+        hit = await cache.match(url);
+      } catch (e) {
+        forceCacheBypass = true;
+        try { if (typeof caches !== 'undefined') await caches.delete(ASSET_CACHE); } catch (e2) {}
+        cache = null;
+        diagAppend('Cache lookup failed for ' + url + ': ' + (e && e.message ? e.message : e) + ' - cache cleared; fetching from network', 'warn');
+      }
       if (hit) {
-        const cached = new Uint8Array(await hit.arrayBuffer());
-        if (cached.length === part.size) return cached;
-        await cache.delete(url);
+        try {
+          // cache.match() returns a fresh Response; read its body once.
+          const cached = new Uint8Array(await hit.arrayBuffer());
+          if (cached.length === part.size) return cached;
+          diagAppend('Cached ' + url + ' has the wrong size; refreshing from network', 'warn');
+        } catch (e) {
+          diagAppend('Cache read failed for ' + url + ': ' + (e && e.message ? e.message : e) + ' - refreshing from network', 'warn');
+        }
+        // A bad cached entry invalidates the whole cache so the user is never
+        // stuck on a permanently corrupt asset bundle.
+        forceCacheBypass = true;
+        try { if (typeof caches !== 'undefined') await caches.delete(ASSET_CACHE); } catch (e) {}
+        cache = null;
       }
     }
-    const r = await fetch(url);
+
+    const r = await fetch(url, { cache: 'no-store' });
     if (!r.ok) throw new Error(part.name + ': HTTP ' + r.status);
     const bytes = new Uint8Array(await r.arrayBuffer());
     if (bytes.length !== part.size) throw new Error(part.name + ' has the wrong size');
     if (cache) {
-      writes.push(cache.put(url, new Response(bytes)).catch((e) => console.warn('could not cache ' + part.name, e)));
+      try {
+        // Awaiting here keeps at most one chunk's backing buffer alive for
+        // the cache write instead of queueing four 24 MB writes at once.
+        await cache.put(url, new Response(bytes));
+      } catch (e) {
+        diagAppend('Could not cache ' + part.name + ': ' + (e && e.message ? e.message : e), 'warn');
+      }
     }
     return bytes;
   }
 
   async function loadAssets(manifest) {
-    const cache = await openAssetCache();
+    let cache = forceCacheBypass ? null : await openAssetCache();
+    if (forceCacheBypass && typeof caches !== 'undefined') {
+      try { await caches.delete(ASSET_CACHE); } catch (e) {}
+    }
     const buf = new Uint8Array(manifest.size);
     const offsets = [];
     let end = 0;
@@ -539,27 +852,34 @@
     }
     if (end !== manifest.size) throw new Error('assets.manifest.json is inconsistent');
 
-    const writes = [];
-    let loaded = 0, next = 0;
-    const worker = async () => {
-      while (next < manifest.parts.length) {
-        const i = next++;
-        const bytes = await fetchPart(cache, manifest.parts[i], writes);
-        buf.set(bytes, offsets[i]);
-        loaded += bytes.length;
-        const pct = Math.floor((loaded / manifest.size) * 100);
-        barfill.style.width = pct + '%';
-        pctEl.textContent = pct + '%';
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(4, manifest.parts.length) }, worker));
+    // Load chunks strictly one at a time. Each chunk is copied into the
+    // destination buffer and then dropped, so peak JS memory stays close to
+    // one chunk rather than the whole 142 MB asset set.
+    let loaded = 0;
+    for (let i = 0; i < manifest.parts.length; i++) {
+      const part = manifest.parts[i];
+      stage('[2/5] Reading chunks from cache (or downloading)... chunk ' + (i + 1) + '/' + manifest.parts.length);
+      let bytes = await fetchPart(cache, part);
+      stage('[3/5] Reassembling assets.data in memory... chunk ' + (i + 1) + '/' + manifest.parts.length);
+      buf.set(bytes, offsets[i]);
+      loaded += bytes.length;
+      bytes = null;
+      const pct = Math.floor((loaded / manifest.size) * 100);
+      barfill.style.width = pct + '%';
+      pctEl.textContent = pct + '%';
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    stage('[3/5] Reassembling assets.data in memory... complete (' + loaded + ' bytes)');
+    if (loaded !== manifest.size) throw new Error('asset assembly size mismatch: ' + loaded + ' != ' + manifest.size);
 
-    if (cache) {
-      const wanted = new Set(manifest.parts.map((p) => new URL(p.name, location.href).href));
-      Promise.all(writes)
-        .then(() => cache.keys())
-        .then((keys) => Promise.all(keys.filter((k) => !wanted.has(k.url)).map((k) => cache.delete(k))))
-        .catch(() => {});
+    if (cache && !forceCacheBypass) {
+      try {
+        const wanted = new Set(manifest.parts.map((p) => new URL(p.name, location.href).href));
+        const keys = await cache.keys();
+        await Promise.all(keys.filter((k) => !wanted.has(k.url)).map((k) => cache.delete(k)));
+      } catch (e) {
+        diagAppend('Could not prune old asset cache entries: ' + (e && e.message ? e.message : e), 'warn');
+      }
     }
     return buf;
   }
@@ -573,17 +893,17 @@
       fail('This game needs a newer browser. Use Chrome or Edge 137 or later.');
       return;
     }
-    let adapter = null;
-    try { adapter = await navigator.gpu.requestAdapter(); } catch (e) {}
-    if (!adapter) {
-      fail('WebGPU is available but no GPU adapter could be acquired on this system.');
-      return;
+
+    let resolution = await chooseResolution();
+
+    if (cleanBootEl && cleanBootEl.checked) {
+      await purgeStoredData();
     }
-    Module.onAbort = (w) => fail('Startup failed: ' + w);
-    watchGpu();
+    if (bypassCacheEl && bypassCacheEl.checked) {
+      await clearAssetCache();
+    }
 
-    const resolution = await chooseResolution();
-
+    stage('[1/5] Checking cache manifest...');
     let manifest;
     try {
       const mf = await fetch('assets.manifest.json', { cache: 'no-cache' });
@@ -594,19 +914,98 @@
       return;
     }
 
+    stage('[2/5] Reading chunks from cache (or downloading)...');
     const loadStart = performance.now();
+    let assetBuf = null;
     try {
-      const buf = await loadAssets(manifest);
+      assetBuf = await loadAssets(manifest);
       console.log('[load] assets ready in ' + Math.round(performance.now() - loadStart) + 'ms');
-      Module.getPreloadedPackage = () => buf.buffer;
     } catch (e) {
       fail('Failed to load game assets: ' + e.message);
       return;
     }
 
+    stage('[4/5] Initializing WebGPU adapter and device...');
+    let gpuReady = false;
+    let adapter = null;
+    try {
+      adapter = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' });
+    } catch (e) {
+      const msg = e && e.message ? e.message : String(e);
+      showDiagError('navigator.gpu.requestAdapter() rejected:\n' + msg);
+      fail('WebGPU adapter request failed: ' + msg);
+      return;
+    }
+    if (!adapter) {
+      showDiagError('navigator.gpu.requestAdapter() returned null.\nThe browser blocked WebGPU or exposed no suitable adapter.');
+      fail('WebGPU is available but no GPU adapter could be acquired on this system.');
+      return;
+    }
+
+    let info = null;
+    try {
+      if (adapter.info) info = adapter.info;
+      else if (typeof adapter.requestAdapterInfo === 'function') info = await adapter.requestAdapterInfo();
+    } catch (e) {
+      console.warn('[shell] adapter info unavailable', e);
+    }
+    const limits = adapter.limits || {};
+    const value = (v) => (v === undefined || v === null || v === '') ? '(unavailable)' : String(v);
+    const arch = value(info && info.architecture);
+    const deviceName = info && info.device ? ' / ' + info.device : '';
+    showDiag([
+      'Vendor: ' + value(info && info.vendor),
+      'Architecture/Renderer: ' + arch + deviceName,
+      'Driver/Description: ' + value(info && info.description),
+      'maxBufferSize: ' + value(limits.maxBufferSize),
+      'maxStorageBufferBindingSize: ' + value(limits.maxStorageBufferBindingSize),
+      'maxTextureDimension2D: ' + value(limits.maxTextureDimension2D),
+    ].join('\n'));
+
+    const adapterText = [info && info.vendor, info && info.architecture, info && info.device, info && info.description]
+      .filter(Boolean).join(' ').toLowerCase();
+    if (/mali|mediatek|arm/.test(adapterText)) {
+      AVAILABLE_RESOLUTIONS = RESOLUTIONS.filter((r) => r.auto || (r.w === 640 && r.h === 480));
+      if (!resolution.auto && (resolution.w !== 640 || resolution.h !== 480)) {
+        resolution = { w: 640, h: 480 };
+        diagAppend('ARM/Mali adapter detected: forcing fixed 640x480', 'warn');
+      }
+      console.warn('[shell] ARM/Mali adapter detected: using 480p resolution');
+    }
+
+    // Probe the device request here so a policy/limit rejection is shown on
+    // screen before the wasm runtime asks for its own device.
+    try {
+      const probe = await adapter.requestDevice();
+      probe.lost.then((lost) => {
+        if (lost && lost.reason !== 'destroyed') {
+          showDiagError('Device lost: ' + value(lost.reason) + '\n' + value(lost.message));
+        }
+      }).catch(() => {});
+      try { probe.destroy(); } catch (e) {}
+      gpuReady = true;
+    } catch (e) {
+      const msg = e && e.message ? e.message : String(e);
+      showDiagError('adapter.requestDevice() rejected:\n' + msg);
+      fail('WebGPU device request failed: ' + msg);
+      return;
+    }
+
+    Module.onAbort = (w) => fail('Startup failed: ' + w);
+    watchGpu();
+
+    if (!gpuReady) {
+      fail('WebGPU device initialization did not complete before startup.');
+      return;
+    }
+
+    stage('[5/5] Passing assets to Emscripten and launching main()...');
     await loadPersisted();
+    // Re-apply safe graphics settings after IndexedDB options are loaded, so
+    // an old options.ini can never override this boot's safe resolution.
     persisted.options = withResolution(persisted.options, resolution);
 
+    Module.getPreloadedPackage = () => assetBuf.buffer;
     Module.locateFile = (path, dir) => path.endsWith('.wasm') ? manifest.wasm : dir + path;
     const loadScript = (src) => new Promise((resolve, reject) => {
       const s = document.createElement('script');
@@ -622,6 +1021,842 @@
       fail('Failed to start the game: ' + e.message);
     }
   })();
+
+  /* ---------------------------------------------------------------------
+     Save helpers shared by the Community Saves UI.
+     Actual game saves are flat .cbsav files under /Saves. The legacy /Save
+     layout (one directory per save) is still read and mirrored for
+     compatibility.
+     --------------------------------------------------------------------- */
+
+  const b64enc = (bytes) => {
+    const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    let bin = '';
+    for (let i = 0; i < b.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  };
+
+  function getFS() {
+    if (typeof FS !== 'undefined' && FS) return FS;
+    if (typeof Module !== 'undefined' && Module && Module.FS) return Module.FS;
+    return undefined;
+  }
+
+  function fsReady() {
+    const FSx = getFS();
+    return !!(FSx && typeof FSx.readdir === 'function' &&
+              typeof FSx.readFile === 'function' && typeof FSx.writeFile === 'function');
+  }
+
+  function fsMkdirp(path) {
+    const FSx = getFS();
+    if (!FSx || typeof FSx.mkdir !== 'function') return;
+    const parts = String(path || '').split('/').filter(Boolean);
+    let cur = '';
+    for (const part of parts) {
+      cur += '/' + part;
+      try { FSx.mkdir(cur); } catch (e) {}
+    }
+  }
+
+  function fsPathExists(path) {
+    const FSx = getFS();
+    if (!FSx || typeof FSx.stat !== 'function') return false;
+    try { FSx.stat(path); return true; } catch (e) { return false; }
+  }
+
+  function sanitizeSaveName(raw) {
+    let s = String(raw == null ? '' : raw);
+    s = s.replace(/^\s*\[Shared\]\s*/i, ' ');
+    s = s.replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g, ' ');
+    s = s.replace(/\s+/g, ' ').trim();
+    s = s.replace(/^\.+/, '').trim();
+    if (s.length > 60) s = s.slice(0, 60).trim();
+    return s || 'Imported Save';
+  }
+
+  function safeRelPath(path) {
+    if (typeof path !== 'string') return false;
+    if (!path || path.length > 200) return false;
+    if (/[\x00-\x1f\x7f\\]/.test(path)) return false;
+    if (path.charAt(0) === '/') return false;
+    if (/^[A-Za-z]:/.test(path)) return false;
+    const segments = path.split('/');
+    for (const segment of segments) {
+      if (!segment || segment === '.' || segment === '..') return false;
+    }
+    return true;
+  }
+
+  function getLocalSaves() {
+    const out = [];
+    try {
+      const FSx = getFS();
+      if (!FSx || typeof FSx.readdir !== 'function' || typeof FSx.stat !== 'function' ||
+          typeof FSx.isDir !== 'function' || typeof FSx.isFile !== 'function') {
+        return out;
+      }
+
+      const roots = ['/Saves'];
+      try { if (fsPathExists('/Save')) roots.push('/Save'); } catch (e) {}
+
+      const seen = new Set();
+      for (const root of roots) {
+        let names;
+        try { names = FSx.readdir(root); } catch (e) { continue; }
+        for (const entry of names) {
+          if (!entry || entry === '.' || entry === '..') continue;
+          const abs = root + '/' + entry;
+          let st;
+          try { st = FSx.stat(abs); } catch (e) { continue; }
+          let desc = null;
+          if (FSx.isDir(st.mode)) {
+            desc = { name: entry, root: root, kind: 'dir' };
+          } else if (FSx.isFile(st.mode) && /\.cbsav$/i.test(entry)) {
+            desc = { name: entry.replace(/\.cbsav$/i, ''), root: root, kind: 'file', file: entry };
+          }
+          if (!desc) continue;
+          if (seen.has(desc.name)) continue; // /Saves wins over /Save
+          seen.add(desc.name);
+          out.push(desc);
+        }
+      }
+      out.sort((a, b) => a.name.localeCompare(b.name));
+    } catch (e) {
+      // never throw: the UI treats this as "no local saves"
+    }
+    return out;
+  }
+
+  function resolveSaveDescriptor(sel) {
+    if (sel && typeof sel === 'object') return sel;
+    const wanted = String(sel == null ? '' : sel);
+    const hit = getLocalSaves().find((s) => s.name === wanted);
+    if (!hit) throw new Error('Save "' + wanted + '" was not found.');
+    return hit;
+  }
+
+  function readSaveDirectory(saveNameOrDescriptor) {
+    const FSx = getFS();
+    if (!fsReady()) throw new Error('The game filesystem is not ready yet.');
+    const desc = resolveSaveDescriptor(saveNameOrDescriptor);
+    const files = {};
+
+    if (desc.kind === 'file') {
+      const abs = desc.root + '/' + desc.file;
+      let bytes;
+      try { bytes = FSx.readFile(abs); } catch (e) {
+        throw new Error('Could not read "' + desc.file + '".');
+      }
+      files[desc.file] = b64enc(bytes);
+      return { saveFolder: desc.name, files: files };
+    }
+
+    const base = desc.root + '/' + desc.name;
+    if (!fsPathExists(base)) throw new Error('Save folder "' + desc.name + '" was not found.');
+
+    const walk = (dir, rel) => {
+      let names;
+      try { names = FSx.readdir(dir); } catch (e) {
+        throw new Error('Could not read the save folder "' + desc.name + '".');
+      }
+      for (const name of names) {
+        if (!name || name === '.' || name === '..') continue;
+        const abs = dir + '/' + name;
+        const relPath = rel ? rel + '/' + name : name;
+        let st;
+        try { st = FSx.stat(abs); } catch (e) { continue; }
+        if (FSx.isDir(st.mode)) {
+          walk(abs, relPath);
+        } else if (FSx.isFile(st.mode)) {
+          if (!safeRelPath(relPath)) continue;
+          let bytes;
+          try { bytes = FSx.readFile(abs); } catch (e) { continue; }
+          files[relPath] = b64enc(bytes);
+        }
+      }
+    };
+    walk(base, '');
+
+    if (!Object.keys(files).length) throw new Error('That save folder is empty.');
+    return { saveFolder: desc.name, files: files };
+  }
+
+  /* Read the map seed from a .cbsav. Blitz saves strings as an int32 length
+     followed by raw bytes; ints/floats are 4 bytes and bytes are 1 byte. The
+     sequence below mirrors SaveGame() in save.bb up to RandomSeed. */
+  function extractSaveSeed(bytes) {
+    try { return extractSaveSeedUnchecked(bytes); } catch (e) { return null; }
+  }
+
+  function extractSaveSeedUnchecked(bytes) {
+    const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    let pos = 0;
+    const need = (n) => {
+      if (n < 0 || pos + n > data.length) throw new Error('truncated save');
+    };
+    const skip = (n) => { need(n); pos += n; };
+    const u8 = () => { need(1); return data[pos++]; };
+    const i32 = () => { need(4); const value = view.getInt32(pos, true); pos += 4; return value; };
+    const string = (limit) => {
+      const size = i32();
+      if (size < 0 || size > (limit || 4096)) throw new Error('invalid save string');
+      need(size);
+      const value = new TextDecoder().decode(data.subarray(pos, pos + size));
+      pos += size;
+      return value;
+    };
+
+    string(); string();          // CurrentTime, CurrentDate
+    skip(4);                     // PlayTime
+    skip(12);                    // Collider x/y/z
+    skip(12);                    // Head x/y/z
+    string();                    // AccessCode
+    skip(8);                     // camera pitch, entity yaw
+    string();                    // CompatibleNumber
+    skip(12);                    // blink timers
+    skip(8);                     // death/blur timers
+    skip(4);                     // heal timer
+    u8();                        // crouch
+    skip(12);                    // stamina
+    skip(8);                     // eye
+    skip(16);                    // injuries/bloodloss
+    string();                    // DeathMSG
+    skip(24);                    // SCP1025 state
+    skip(4);                     // vomit timer
+    u8();                        // vomit
+    skip(8);                     // camera shake, infect
+    const difficulty = u8();
+    if (difficulty === 3) skip(4); // CUSTOM difficulty extras
+    skip(8);                     // monitor timer, sanity
+    skip(5);                     // wearing flags
+    skip(24);                    // NTF_1499 values
+    skip(8);                     // previous room x/z
+    u8();                        // superman
+    skip(4);                     // superman timer
+    u8();                        // lights on
+    const numeric = u8();        // HasNumericSeed
+
+    let seed, seedKind;
+    if (numeric) {
+      seed = String(i32());
+      seedKind = 'numeric';
+    } else {
+      seed = string(256);
+      seedKind = 'text';
+    }
+    seed = seed.replace(/[\x00-\x1f\x7f]/g, '').slice(0, 64);
+    return seed ? { seed: seed, seedKind: seedKind } : null;
+  }
+
+  function readSaveSeed(saveNameOrDescriptor) {
+    const FSx = getFS();
+    if (!FSx || !fsReady()) return null;
+    const desc = resolveSaveDescriptor(saveNameOrDescriptor);
+    let path = null;
+
+    if (desc.kind === 'file') {
+      path = desc.root + '/' + desc.file;
+    } else {
+      const queue = [desc.root + '/' + desc.name];
+      while (queue.length && !path) {
+        const dir = queue.shift();
+        let names;
+        try { names = FSx.readdir(dir); } catch (e) { continue; }
+        const cbsavs = names.filter((n) => n && n !== '.' && n !== '..' && /\.cbsav$/i.test(n)).sort();
+        if (cbsavs.length) { path = dir + '/' + cbsavs[0]; break; }
+        for (const name of names) {
+          if (!name || name === '.' || name === '..') continue;
+          const abs = dir + '/' + name;
+          try {
+            if (FSx.isDir(FSx.stat(abs).mode)) queue.push(abs);
+          } catch (e) {}
+        }
+      }
+    }
+
+    if (!path) return null;
+    try { return extractSaveSeed(FSx.readFile(path)); }
+    catch (e) { return null; }
+  }
+
+  function writeSaveDirectory(saveName, files) {
+    const FSx = getFS();
+    if (!fsReady()) throw new Error('The game filesystem is not ready yet.');
+    if (!files || typeof files !== 'object' || Array.isArray(files)) {
+      throw new Error('The save contains no files.');
+    }
+
+    const name = sanitizeSaveName(saveName);
+    const sharedName = '[Shared] ' + name;
+    const keys = Object.keys(files);
+    if (!keys.length) throw new Error('The save contains no files.');
+    for (const key of keys) {
+      if (!safeRelPath(key)) throw new Error('Invalid file path in save: ' + key);
+      if (typeof files[key] !== 'string') throw new Error('Invalid file contents for ' + key);
+    }
+
+    const decoded = new Map();
+    const bytesFor = (key) => {
+      if (!decoded.has(key)) {
+        let bytes;
+        try { bytes = b64dec(files[key]); } catch (e) {
+          throw new Error('Invalid base64 in save file: ' + key);
+        }
+        decoded.set(key, bytes);
+      }
+      return decoded.get(key);
+    };
+
+    const writeTo = (base, rel, bytes) => {
+      const parts = rel.split('/');
+      let cur = base;
+      for (let i = 0; i < parts.length - 1; i++) {
+        cur += '/' + parts[i];
+        try { FSx.mkdir(cur); } catch (e) {}
+      }
+      FSx.writeFile(cur + '/' + parts[parts.length - 1], bytes);
+    };
+
+    const removeTree = (path) => {
+      let st;
+      try { st = FSx.stat(path); } catch (e) { return; }
+      if (FSx.isDir(st.mode)) {
+        let names = [];
+        try { names = FSx.readdir(path); } catch (e) {}
+        for (const child of names) {
+          if (child === '.' || child === '..') continue;
+          removeTree(path + '/' + child);
+        }
+        try { FSx.rmdir(path); } catch (e) {}
+      } else {
+        try { FSx.unlink(path); } catch (e) {}
+      }
+    };
+
+    const topCbsav = keys.filter((k) => k.indexOf('/') < 0 && /\.cbsav$/i.test(k));
+    const paths = [];
+
+    // Decode everything before touching the filesystem so a bad payload
+    // cannot leave a half-written save behind.
+    for (const key of keys) bytesFor(key);
+
+    fsMkdirp('/Saves');
+    const dir = '/Saves/' + sharedName;
+    const canonical = dir + '.cbsav';
+    const mirror = '/Save/' + sharedName;
+
+    try {
+      // Remove both possible previous shapes so an overwrite never leaves stale saves.
+      removeTree(canonical);
+      removeTree(dir);
+
+      if (keys.length === 1 && topCbsav.length === 1) {
+        // Flat .cbsav is the canonical format the in-game Load Game menu scans.
+        FSx.writeFile(canonical, bytesFor(keys[0]));
+        paths.push(canonical);
+      } else {
+        fsMkdirp(dir);
+        for (const key of keys) writeTo(dir, key, bytesFor(key));
+        paths.push(dir);
+
+        if (topCbsav.length) {
+          FSx.writeFile(canonical, bytesFor(topCbsav[0]));
+          paths.push(canonical);
+        }
+      }
+
+      // Compatibility mirror in the legacy /Save layout.
+      try {
+        removeTree(mirror);
+        fsMkdirp('/Save');
+        fsMkdirp(mirror);
+        for (const key of keys) writeTo(mirror, key, bytesFor(key));
+        paths.push(mirror);
+      } catch (e) {
+        console.warn('could not create /Save compatibility mirror', e);
+      }
+    } catch (e) {
+      // Do not leave a half-written save that the in-game menu could try to load.
+      removeTree(canonical);
+      removeTree(dir);
+      removeTree(mirror);
+      throw e;
+    }
+
+    try { if (FSx.syncfs) FSx.syncfs(false, () => {}); } catch (e) {}
+
+    return { name: sharedName, paths: paths };
+  }
+
+
+  /* ---------------------------------------------------------------------
+     Community Saves UI
+     --------------------------------------------------------------------- */
+
+  const CS_API = '/api/saves';
+  const csToggle = document.getElementById('cs-toggle');
+  const csFullscreenBtn = document.getElementById('cs-fullscreen');
+  const csResetBtn = document.getElementById('cs-reset');
+  const csOverlay = document.getElementById('cs-overlay');
+  const csClose = document.getElementById('cs-close');
+  const csRefreshBtn = document.getElementById('cs-refresh');
+  const csList = document.getElementById('cs-list');
+  const csBrowseStatus = document.getElementById('cs-browse-status');
+  const csUploadStatus = document.getElementById('cs-upload-status');
+  const csLocalSelect = document.getElementById('cs-local-select');
+  const csLocalSeed = document.getElementById('cs-local-seed');
+  const csTitleInput = document.getElementById('cs-title-input');
+  const csAuthorInput = document.getElementById('cs-author-input');
+  const csDescInput = document.getElementById('cs-desc-input');
+  const csShareBtn = document.getElementById('cs-share');
+  const csToast = document.getElementById('cs-toast');
+  const csTabs = Array.from(document.querySelectorAll('.cs-tab'));
+  const csPanels = Array.from(document.querySelectorAll('.cs-panel'));
+
+  let csWasLocked = false;
+  let csActiveTab = 'browse';
+  let csLocals = [];
+  let csTitleTouched = false;
+  let csSeedToken = 0;
+  let csToastTimer = null;
+  let csSwallowEscapeUp = false;
+
+  function csSetStatus(el, text, isError) {
+    el.textContent = text;
+    el.classList.toggle('error', !!isError);
+  }
+
+  function showToast(message, type) {
+    csToast.textContent = message;
+    csToast.classList.remove('error');
+    if (type === 'error') csToast.classList.add('error');
+    csToast.classList.add('show');
+    if (csToastTimer) clearTimeout(csToastTimer);
+    csToastTimer = setTimeout(() => {
+      csToast.classList.remove('show');
+      csToastTimer = null;
+    }, 4500);
+  }
+
+  function csSwitchTab(tab) {
+    csActiveTab = tab === 'upload' ? 'upload' : 'browse';
+    for (const button of csTabs) {
+      const active = button.dataset.tab === csActiveTab;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    }
+    for (const panel of csPanels) {
+      panel.classList.toggle('active', panel.dataset.panel === csActiveTab);
+    }
+  }
+
+  function csOverlayOpen() {
+    return csOverlay.classList.contains('open');
+  }
+
+  function csFullscreenActive() {
+    return !!document.fullscreenElement;
+  }
+
+  function csSyncFullscreenUI() {
+    document.body.classList.toggle('cs-fullscreen', csFullscreenActive());
+  }
+
+  async function csEnterFullscreen() {
+    try {
+      if (!document.documentElement.requestFullscreen) throw new Error('fullscreen is not supported by this browser');
+      await document.documentElement.requestFullscreen();
+    } catch (e) {
+      showToast('Could not enter fullscreen: ' + (e && e.message ? e.message : e), 'error');
+    }
+  }
+
+  async function csResetAllData() {
+    if (!window.confirm('Reset all local data?\n\nThis deletes saves, options and cached assets, then reloads the game.')) return;
+    try { if (persisted.db) { persisted.db.close(); persisted.db = null; } } catch (e) {}
+    try {
+      localStorage.removeItem(RESOLUTION_KEY);
+      localStorage.removeItem('scpcb.options');
+      localStorage.removeItem('scpcb.saves');
+    } catch (e) {}
+    try {
+      await new Promise((resolve) => {
+        const req = indexedDB.deleteDatabase('scpcb');
+        let done = false;
+        const finish = () => { if (!done) { done = true; resolve(); } };
+        req.onsuccess = req.onerror = req.onblocked = finish;
+        setTimeout(finish, 1500);
+      });
+    } catch (e) {}
+    try { if (typeof caches !== 'undefined') await caches.delete(ASSET_CACHE); } catch (e) {}
+    location.reload();
+  }
+
+  function csOpenModal(tab) {
+    csWasLocked = !!document.pointerLockElement;
+    csSwallowEscapeUp = false;
+    csTitleTouched = false;
+    // Release the pointer so the mouse is usable; the shell's wrapper suppresses
+    // the synthetic Escape that would otherwise open the in-game menu.
+    try { document.exitPointerLock(); } catch (e) {}
+    csOverlay.classList.add('open');
+    csOverlay.setAttribute('aria-hidden', 'false');
+    csSwitchTab(tab || 'browse');
+    try { csClose.focus(); } catch (e) {}
+    if (csActiveTab === 'upload') csRefreshLocals();
+    else csLoadCommunitySaves();
+  }
+
+  function csCloseModal(relock) {
+    if (!csOverlayOpen()) return;
+    csOverlay.classList.remove('open');
+    csOverlay.setAttribute('aria-hidden', 'true');
+    const shouldRelock = !!relock && csWasLocked;
+    csWasLocked = false;
+    if (shouldRelock) canvas.requestPointerLock();
+  }
+
+  function csFormatTimestamp(value) {
+    if (!value) return 'unknown date';
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return String(value);
+    try { return date.toLocaleString(); } catch (e) { return date.toISOString(); }
+  }
+
+  function csFormatBytes(n) {
+    const value = Number(n);
+    if (!isFinite(value) || value < 0) return '0 B';
+    if (value < 1024) return Math.round(value) + ' B';
+    if (value < 1024 * 1024) return (value / 1024).toFixed(1) + ' KB';
+    return (value / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function csRenderCard(save) {
+    const card = document.createElement('div');
+    card.className = 'cs-card';
+
+    const body = document.createElement('div');
+    body.className = 'cs-card-body';
+
+    const title = document.createElement('div');
+    title.className = 'cs-card-title';
+    title.textContent = String(save.title || 'Untitled Save');
+    body.appendChild(title);
+
+    const meta = document.createElement('div');
+    meta.className = 'cs-card-meta';
+    const parts = [];
+    parts.push('by ' + String(save.author || 'Anonymous'));
+    parts.push(csFormatTimestamp(save.timestamp));
+    if (save.seed) {
+      parts.push((save.seedKind === 'numeric' ? 'numeric seed ' : 'seed ') + String(save.seed));
+    }
+    const count = Number(save.fileCount);
+    parts.push((isFinite(count) ? count : 0) + (count === 1 ? ' file' : ' files'));
+    parts.push(csFormatBytes(save.totalBytes));
+    meta.textContent = parts.join('  \u00b7  ');
+    body.appendChild(meta);
+
+    if (save.description) {
+      const desc = document.createElement('div');
+      desc.className = 'cs-card-desc';
+      desc.textContent = String(save.description);
+      body.appendChild(desc);
+    }
+
+    card.appendChild(body);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'cs-btn';
+    button.textContent = '[ Import to Game ]';
+    button.addEventListener('click', () => csImportSave(save, button));
+    card.appendChild(button);
+
+    return card;
+  }
+
+  async function csLoadCommunitySaves() {
+    csList.textContent = '';
+    csSetStatus(csBrowseStatus, 'Loading community saves...', false);
+    try {
+      const response = await fetch(CS_API, { cache: 'no-store' });
+      if (!response.ok) throw new Error('server returned HTTP ' + response.status);
+      let data;
+      try { data = await response.json(); }
+      catch (e) { throw new Error('the server returned an invalid response'); }
+      if (!Array.isArray(data)) throw new Error('the server returned an invalid response');
+
+      if (!data.length) {
+        csSetStatus(csBrowseStatus, 'No community saves yet. Be the first to share one.', false);
+        return;
+      }
+      csSetStatus(csBrowseStatus, data.length + (data.length === 1 ? ' save' : ' saves') + ' in the archive.', false);
+      for (const save of data) {
+        if (!save || typeof save !== 'object') continue;
+        csList.appendChild(csRenderCard(save));
+      }
+    } catch (err) {
+      csSetStatus(csBrowseStatus, 'Could not load community saves: ' + (err && err.message ? err.message : err), true);
+    }
+  }
+
+  async function csImportSave(save, button) {
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Importing...';
+    try {
+      const id = String(save.id || '');
+      if (!id) throw new Error('this save has no id');
+      if (!fsReady()) throw new Error('the game is still loading, try again in a moment');
+
+      const response = await fetch(CS_API + '/' + encodeURIComponent(id), { cache: 'no-store' });
+      let payload = null;
+      try { payload = await response.json(); } catch (e) {}
+      if (!response.ok) {
+        throw new Error((payload && payload.error) || ('server returned HTTP ' + response.status));
+      }
+      if (!payload || typeof payload !== 'object') throw new Error('the server returned an invalid response');
+
+      const files = payload.files;
+      if (!files || typeof files !== 'object' || Array.isArray(files) || !Object.keys(files).length) {
+        throw new Error('that save contains no files');
+      }
+
+      const folder = String(payload.saveFolder || payload.title || payload.id || 'Imported Save');
+      writeSaveDirectory(folder, files);
+      showToast("Save imported! Open the in-game menu and select 'Load Game'", 'ok');
+    } catch (err) {
+      showToast('Could not import save: ' + (err && err.message ? err.message : err), 'error');
+    } finally {
+      button.disabled = false;
+      button.textContent = label;
+    }
+  }
+
+  function csSelectedLocal() {
+    const index = parseInt(csLocalSelect.value, 10);
+    return Number.isInteger(index) && csLocals[index] ? csLocals[index] : null;
+  }
+
+  function csPrefillTitle() {
+    if (csTitleTouched) return;
+    const selected = csSelectedLocal();
+    csTitleInput.value = selected ? sanitizeSaveName(selected.name).slice(0, 50) : '';
+  }
+
+  async function csUpdateSeedNotice() {
+    const token = ++csSeedToken;
+    csLocalSeed.classList.remove('warn');
+    const selected = csSelectedLocal();
+    if (!selected) {
+      csLocalSeed.textContent = 'Select a save to detect its map seed.';
+      return;
+    }
+
+    let info = null;
+    try { info = readSaveSeed(selected); } catch (e) {}
+    if (!info || !info.seed) {
+      csLocalSeed.textContent = 'No map seed detected in this save.';
+      return;
+    }
+
+    const label = (info.seedKind === 'numeric' ? 'Numeric seed: ' : 'Seed: ') + info.seed;
+    csLocalSeed.textContent = label;
+
+    try {
+      const response = await fetch(CS_API, { cache: 'no-store' });
+      if (!response.ok) return;
+      const list = await response.json();
+      if (token !== csSeedToken || !Array.isArray(list)) return;
+      const match = list.find((save) => save && save.seed === info.seed && save.seedKind === info.seedKind);
+      if (match) {
+        csLocalSeed.textContent = label + ' \u2014 matches an existing community save; sharing will replace it.';
+        csLocalSeed.classList.add('warn');
+      }
+    } catch (e) {}
+  }
+
+  function csRefreshLocals() {
+    const previous = csLocalSelect.value;
+    csLocalSelect.textContent = '';
+    csLocals = [];
+    csLocalSelect.disabled = true;
+    csShareBtn.disabled = true;
+    csSeedToken++;
+    csLocalSeed.textContent = '';
+    csLocalSeed.classList.remove('warn');
+
+    if (!fsReady()) {
+      csSetStatus(csUploadStatus, 'Game is still loading...', false);
+      return;
+    }
+
+    try { csLocals = getLocalSaves(); } catch (e) { csLocals = []; }
+
+    if (!csLocals.length) {
+      csSetStatus(csUploadStatus, 'No local saves found. Create a save in-game first.', false);
+      return;
+    }
+
+    csLocals.forEach((save, index) => {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = save.name;
+      csLocalSelect.appendChild(option);
+    });
+    const wanted = parseInt(previous, 10);
+    csLocalSelect.value = (Number.isInteger(wanted) && wanted >= 0 && wanted < csLocals.length) ? String(wanted) : '0';
+    csLocalSelect.disabled = false;
+    csShareBtn.disabled = false;
+    csSetStatus(csUploadStatus, csLocals.length + (csLocals.length === 1 ? ' local save' : ' local saves') + ' found. Select one to share.', false);
+    csPrefillTitle();
+    csUpdateSeedNotice();
+  }
+
+  async function csShareSave() {
+    if (!fsReady()) {
+      showToast('The game is still loading. Try again in a moment.', 'error');
+      return;
+    }
+    const selected = csSelectedLocal();
+    if (!selected) {
+      showToast('Select a local save first.', 'error');
+      return;
+    }
+
+    let read;
+    try {
+      read = readSaveDirectory(selected);
+    } catch (err) {
+      showToast('Could not read that save: ' + (err && err.message ? err.message : err), 'error');
+      return;
+    }
+
+    const payload = {
+      title: (csTitleInput.value.trim() || sanitizeSaveName(selected.name)).slice(0, 50),
+      author: (csAuthorInput.value.trim() || 'Anonymous').slice(0, 50),
+      description: csDescInput.value.slice(0, 200),
+      saveFolder: selected.name,
+      files: read.files,
+    };
+
+    let json;
+    try { json = JSON.stringify(payload); }
+    catch (e) {
+      showToast('Could not prepare that save for upload.', 'error');
+      return;
+    }
+
+    let size = 0;
+    try { size = new TextEncoder().encode(json).length; } catch (e) { size = json.length; }
+    if (size > 10 * 1024 * 1024) {
+      showToast('That save is too large to share (the limit is 10 MB).', 'error');
+      return;
+    }
+
+    const label = csShareBtn.textContent;
+    csShareBtn.disabled = true;
+    csShareBtn.textContent = 'Sharing...';
+    csSetStatus(csUploadStatus, 'Uploading save to the archive...', false);
+
+    try {
+      const response = await fetch(CS_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: json,
+      });
+      let result = null;
+      try { result = await response.json(); } catch (e) {}
+      if (!response.ok || !result || result.success === false) {
+        throw new Error((result && result.error) || ('server returned HTTP ' + response.status));
+      }
+      const id = result.id ? String(result.id) : '';
+      const seed = result.seed ? String(result.seed) : '';
+      const seedLabel = seed ? (result.seedKind === 'numeric' ? 'numeric seed ' : 'seed ') + seed : '';
+      let message;
+      if (result.overwritten && seedLabel) {
+        message = 'Existing community save for ' + seedLabel + ' was overwritten (ID: ' + id + ').';
+        showToast('Community save overwritten for ' + seedLabel, 'ok');
+      } else {
+        message = 'Save shared! Community ID: ' + id;
+        message += seedLabel ? ' (' + seedLabel + ')' : ' (no map seed detected)';
+        showToast(message, 'ok');
+      }
+      csSetStatus(csUploadStatus, message, false);
+      csUpdateSeedNotice();
+    } catch (err) {
+      const message = err && err.message ? err.message : String(err);
+      csSetStatus(csUploadStatus, 'Could not share save: ' + message, true);
+      showToast('Could not share save: ' + message, 'error');
+    } finally {
+      csShareBtn.disabled = false;
+      csShareBtn.textContent = label;
+    }
+  }
+
+  csToggle.addEventListener('click', () => {
+    if (csOverlayOpen()) csCloseModal(false);
+    else csOpenModal('browse');
+  });
+  csClose.addEventListener('click', () => csCloseModal(true));
+  csOverlay.addEventListener('click', (event) => {
+    if (event.target === csOverlay) csCloseModal(false);
+  });
+  // Keep mouse/wheel input inside the modal from bubbling to game-level handlers.
+  for (const eventName of ['pointerdown', 'mousedown', 'click', 'wheel']) {
+    csOverlay.addEventListener(eventName, (event) => event.stopPropagation());
+  }
+  for (const tab of csTabs) {
+    tab.addEventListener('click', () => {
+      csSwitchTab(tab.dataset.tab);
+      if (csActiveTab === 'upload') csRefreshLocals();
+      else csLoadCommunitySaves();
+    });
+  }
+  csRefreshBtn.addEventListener('click', () => {
+    if (csActiveTab === 'upload') csRefreshLocals();
+    else csLoadCommunitySaves();
+  });
+  csLocalSelect.addEventListener('change', () => {
+    csPrefillTitle();
+    csUpdateSeedNotice();
+  });
+  csTitleInput.addEventListener('input', () => { csTitleTouched = true; });
+  csShareBtn.addEventListener('click', csShareSave);
+  csResetBtn.addEventListener('click', csResetAllData);
+
+  csFullscreenBtn.addEventListener('click', csEnterFullscreen);
+  document.addEventListener('fullscreenchange', csSyncFullscreenUI);
+  csSyncFullscreenUI();
+
+  function csModalCapturesKeys() {
+    // The modal is visually removed while fullscreen, so the game must get keys.
+    return csOverlayOpen() && !document.body.classList.contains('cs-fullscreen');
+  }
+
+  window.addEventListener('keydown', (event) => {
+    if (!csModalCapturesKeys()) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      csSwallowEscapeUp = true;
+      csCloseModal(false);
+      return;
+    }
+    event.stopImmediatePropagation();
+  }, true);
+  window.addEventListener('keyup', (event) => {
+    // Let key releases through so a key held during fullscreen cannot stick.
+    if (event.key === 'Escape' && csSwallowEscapeUp) {
+      csSwallowEscapeUp = false;
+      event.stopImmediatePropagation();
+    }
+  }, true);
 </script>
 </body>
 </html>

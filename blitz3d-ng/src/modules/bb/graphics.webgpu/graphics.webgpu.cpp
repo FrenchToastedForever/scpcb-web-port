@@ -3,11 +3,23 @@
 #include "canvas.webgpu.h"
 
 #include <cstring>
+#include <string>
 #include <emscripten/heap.h>
 #include <vector>
 #include <fstream>
 
 #include "default.wgsl.h"
+
+// Ask the browser for the swapchain format it actually prefers. Mali/ChromeOS
+// normally reports bgra8unorm; never invent a 10-bit surface format.
+EM_JS( int,bbgpu_preferred_canvas_format,(void),{
+	try {
+		var f=navigator.gpu.getPreferredCanvasFormat();
+		if( f==="bgra8unorm" ) return 1;
+		if( f==="rgba8unorm" ) return 2;
+	} catch( e ) {}
+	return 0;
+});
 
 EM_JS( int,bbgpu_movie_open,(const uint8_t *data,int len),{
 	if( !Module.bbMovies ) Module.bbMovies={};
@@ -151,12 +163,34 @@ EM_ASYNC_JS( void,bbWebGPURafYield,(void),{
 	await new Promise( function( r ){ requestAnimationFrame( r ); } );
 } );
 
+// 10-bit/RGB10A2 render targets crash some ChromeOS Vulkan drivers, so the
+// offscreen framebuffer always uses the standard 8-bit RGBA8 format.
+
+static const char *bbDeviceLostReasonName( WGPUDeviceLostReason reason ){
+	switch( reason ){
+	case WGPUDeviceLostReason_Unknown: return "unknown";
+	case WGPUDeviceLostReason_Destroyed: return "destroyed";
+	case WGPUDeviceLostReason_CallbackCancelled: return "callback-cancelled";
+	case WGPUDeviceLostReason_FailedCreation: return "failed-creation";
+	default: return "other";
+	}
+}
+
 static void bbUncapturedError( WGPUDevice const *device,WGPUErrorType type,WGPUStringView message,void *userdata1,void *userdata2 ){
 	LOGD( "[webgpu] uncaptured error (%d): %.*s",(int)type,(int)message.length,message.data?message.data:"" );
 }
 
 static void bbDeviceLost( WGPUDevice const *device,WGPUDeviceLostReason reason,WGPUStringView message,void *userdata1,void *userdata2 ){
-	LOGD( "[webgpu] device lost (%d): %.*s",(int)reason,(int)message.length,message.data?message.data:"" );
+	const char *reason_name=bbDeviceLostReasonName( reason );
+	std::string msg=message.data?std::string( message.data,(size_t)message.length ):std::string();
+	// Keep the plain stderr line: the shell watches Module.printErr for this.
+	LOGD( "[webgpu] device lost (%s): %s",reason_name,msg.c_str() );
+	EM_ASM({
+		var info=new Object();
+		info.reason=UTF8ToString( $0 );
+		info.message=UTF8ToString( $1 );
+		console.error( "[webgpu] device lost: "+info.reason+" - "+info.message,info );
+	},reason_name,msg.c_str());
 }
 
 
@@ -217,6 +251,7 @@ bool WebGPUContextResources::initDevice( const char *canvas_selector,int width,i
 	BBAdapterRequest areq;
 	WGPURequestAdapterOptions aopts={};
 	aopts.compatibleSurface=surface;
+	aopts.powerPreference=WGPUPowerPreference_LowPower;
 	WGPURequestAdapterCallbackInfo acb={};
 	acb.mode=WGPUCallbackMode_AllowSpontaneous;
 	acb.callback=bbOnAdapter;
@@ -225,6 +260,47 @@ bool WebGPUContextResources::initDevice( const char *canvas_selector,int width,i
 	bbWebGPUWait( this,&areq.done );
 	if( !areq.adapter ) return false;
 	adapter=areq.adapter;
+
+	{
+		WGPUAdapterInfo ainfo={};
+		if( wgpuAdapterGetInfo( adapter,&ainfo )==WGPUStatus_Success ){
+			auto str=[&]( WGPUStringView v ){ return v.data?std::string( v.data,(size_t)v.length ):std::string(); };
+			std::string vendor=str( ainfo.vendor ),architecture=str( ainfo.architecture );
+			std::string device_name=str( ainfo.device ),description=str( ainfo.description );
+			EM_ASM({
+				var info=new Object();
+				info.vendor=UTF8ToString( $0 );
+				info.architecture=UTF8ToString( $1 );
+				info.device=UTF8ToString( $2 );
+				info.description=UTF8ToString( $3 );
+				info.vendorID=$4;
+				info.deviceID=$5;
+				info.adapterType=$6;
+				info.backendType=$7;
+				console.error( "[webgpu] adapter info",info );
+			},vendor.c_str(),architecture.c_str(),device_name.c_str(),description.c_str(),
+			  (int)ainfo.vendorID,(int)ainfo.deviceID,(int)ainfo.adapterType,(int)ainfo.backendType );
+
+			WGPULimits limits={};
+			if( wgpuAdapterGetLimits( adapter,&limits )==WGPUStatus_Success ){
+				EM_ASM({
+					var limits=new Object();
+					limits.maxTextureDimension2D=$0;
+					limits.maxBufferSize=$1;
+					limits.maxStorageBufferBindingSize=$2;
+					limits.maxUniformBufferBindingSize=$3;
+					limits.maxVertexBuffers=$4;
+					limits.maxBindingsPerBindGroup=$5;
+					console.error( "[webgpu] adapter limits",limits );
+				},(int)limits.maxTextureDimension2D,(double)limits.maxBufferSize,
+				  (double)limits.maxStorageBufferBindingSize,(double)limits.maxUniformBufferBindingSize,
+				  (int)limits.maxVertexBuffers,(int)limits.maxBindingsPerBindGroup );
+			}
+			wgpuAdapterInfoFreeMembers( ainfo );
+		}else{
+			LOGD( "%s","[webgpu] could not query adapter info" );
+		}
+	}
 
 	BBDeviceRequest dreq;
 	WGPUDeviceDescriptor ddesc={};
@@ -246,7 +322,23 @@ bool WebGPUContextResources::initDevice( const char *canvas_selector,int width,i
 
 	WGPUSurfaceCapabilities caps={};
 	if( wgpuSurfaceGetCapabilities( surface,adapter,&caps )==WGPUStatus_Success && caps.formatCount>0 ){
-		surface_format=caps.formats[0];
+		// Follow navigator.gpu.getPreferredCanvasFormat(), then fall back to
+		// any supported 8-bit format. Never select a 10-bit surface on Mali.
+		WGPUTextureFormat preferred=WGPUTextureFormat_BGRA8Unorm;
+		if( bbgpu_preferred_canvas_format()==2 ) preferred=WGPUTextureFormat_RGBA8Unorm;
+		bool has_preferred=false,has_bgra8=false;
+		for( size_t i=0;i<caps.formatCount;++i ){
+			if( caps.formats[i]==preferred ) has_preferred=true;
+			if( caps.formats[i]==WGPUTextureFormat_BGRA8Unorm ) has_bgra8=true;
+		}
+		if( has_preferred ){
+			surface_format=preferred;
+		}else if( has_bgra8 ){
+			surface_format=WGPUTextureFormat_BGRA8Unorm;
+		}else{
+			surface_format=caps.formats[0];
+		}
+		LOGD( "[webgpu] preferred canvas format requested=%d selected=%d",(int)preferred,(int)surface_format );
 		wgpuSurfaceCapabilitiesFreeMembers( caps );
 	}else{
 		surface_format=WGPUTextureFormat_BGRA8Unorm;
@@ -875,7 +967,8 @@ WebGPUGraphics::WebGPUGraphics( SDL_Window *wnd ):wnd(wnd),def_font(0),fb(0){
 	bbAppOnChange.add( onAppChange,this );
 
 	fb=d_new WebGPUCanvas( &res,BBCanvas::CANVAS_TEX_VIDMEM );
-	fb->useWideFormat();
+	// Wide color (RGB10A2) is deliberately not enabled: 10-bit render passes
+	// crash ChromeOS Vulkan drivers, and the framebuffer stays RGBA8.
 
 	front_canvas=fb;
 	back_canvas=fb;

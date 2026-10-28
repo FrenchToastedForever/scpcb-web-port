@@ -8,6 +8,10 @@ End Type
 
 Const MATERIALS_DATA_PATH$ = "Data\materials.ini"
 
+; Counts successful room placements so map generation can yield every few
+; rooms instead of blocking the browser's GPU watchdog on slow ARM CPUs.
+Global MapGenYieldCounter%
+
 Function InitMaterials()
 	Local hasOverride%
 	For m.ActiveMods = Each ActiveMods
@@ -2075,6 +2079,10 @@ Function CreateRoom.Rooms(zone%, roomshape%, x#, y#, z#, angle%, name$)
 				r\angle = angle
 				If angle <> 0 Then TurnEntity(r\obj, 0, angle, 0)
 				CalculateRoomExtents(r)
+				MapGenYieldCounter = MapGenYieldCounter + 1
+				; Yield every 3 rooms so the GPU watchdog never sees a long
+				; synchronous stretch on slow ARM/Chromebook CPUs.
+				If (MapGenYieldCounter Mod 3) = 0 Then Delay 1
 				Return r
 			EndIf
 		Next
@@ -2118,6 +2126,8 @@ Function CreateRoom.Rooms(zone%, roomshape%, x#, y#, z#, angle%, name$)
 					r\angle = angle
 					If angle <> 0 Then TurnEntity(r\obj, 0, angle, 0)
 					CalculateRoomExtents(r)
+					MapGenYieldCounter = MapGenYieldCounter + 1
+					If (MapGenYieldCounter Mod 3) = 0 Then Delay 1
 					Return r
 				End If
 			EndIf
@@ -7459,6 +7469,7 @@ Const spacing# = 8.0
 
 Function CreateRooms(loadingstart,loadingcount#)
 	Local r.Rooms
+	MapGenYieldCounter = 0
 	For y = MapHeight - 1 To 0 Step - 1
 		DrawLoading(loadingstart + Float(MapHeight - 1 - y) / (MapHeight - 1) * loadingcount)
 		
@@ -7547,6 +7558,8 @@ Function CreateRooms(loadingstart,loadingcount#)
 				End Select
 			EndIf
 		Next
+		; Give the event loop/GPU watchdog a chance even on sparse rows.
+		Delay 1
 	Next
 
 	r = CreateRoom(0, ROOM1, (MapWidth-1) * 8, 500, 8, 0, "gatea")
