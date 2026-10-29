@@ -243,6 +243,66 @@
     console.error('[shell] ' + text);
   }
 
+  // Emscripten's OpenAL backend creates its AudioContext lazily when the
+  // game starts. Patch the constructor/node prototypes now so every context
+  // gets a larger playback buffer and a master limiter before destination.
+  function installAudioFixes() {
+    const NativeAudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!NativeAudioContext || NativeAudioContext.__scpcbPatched) return;
+
+    function ScpcbAudioContext(options) {
+      const opts = Object.assign({}, options || {});
+      if (opts.latencyHint === undefined) opts.latencyHint = 'playback';
+      // Leave sampleRate to the hardware unless a caller explicitly supplied
+      // one; forcing 48 kHz on a 44.1 kHz device would add a resampler.
+      try {
+        return new NativeAudioContext(opts);
+      } catch (e) {
+        console.warn('[audio] latencyHint rejected, using default AudioContext', e);
+        return new NativeAudioContext();
+      }
+    }
+    ScpcbAudioContext.prototype = NativeAudioContext.prototype;
+
+    const nativeCreateGain = NativeAudioContext.prototype.createGain;
+    if (nativeCreateGain) {
+      NativeAudioContext.prototype.createGain = function (...args) {
+        const gain = nativeCreateGain.apply(this, args);
+        if (!this.__scpcbLimiter) {
+          const limiter = this.createDynamicsCompressor();
+          limiter.threshold.value = -3;
+          limiter.knee.value = 0;
+          limiter.ratio.value = 20;
+          limiter.attack.value = 0.003;
+          limiter.release.value = 0.25;
+          limiter.connect(this.destination);
+          this.__scpcbLimiter = limiter;
+          console.log('[audio] master limiter enabled at ' + this.sampleRate + ' Hz');
+        }
+        const nativeConnect = gain.connect.bind(gain);
+        gain.connect = function (destination, ...rest) {
+          if (destination === this.context.destination) destination = this.context.__scpcbLimiter;
+          return nativeConnect(destination, ...rest);
+        };
+        return gain;
+      };
+    }
+
+    try {
+      Object.defineProperty(window, 'AudioContext', {
+        configurable: true,
+        writable: true,
+        value: ScpcbAudioContext,
+      });
+      if (window.webkitAudioContext) window.webkitAudioContext = ScpcbAudioContext;
+      NativeAudioContext.__scpcbPatched = true;
+      console.log('[audio] AudioContext patched: latencyHint=playback');
+    } catch (e) {
+      console.warn('[audio] could not patch AudioContext', e);
+    }
+  }
+  installAudioFixes();
+
   function fit(){
     // Fill the viewport exactly; no letterbox/pillarbox bars caused by
     // aspect-ratio matching. The game buffer is sized by the resolution
